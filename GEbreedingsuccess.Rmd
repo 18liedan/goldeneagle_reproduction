@@ -1,5 +1,5 @@
 ---
-title: "GEbreedingsucces"
+title: "GEbreeding_glmm"
 output:
   html_document: default
   word_document: default
