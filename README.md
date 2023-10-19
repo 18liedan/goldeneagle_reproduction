@@ -1,2 +1,2 @@
 # goldeneagle_reproduction
-R code for calculation and modelling of captive golden eagle reproductive success.
+R code for modelling captive golden eagle reproductive success.
