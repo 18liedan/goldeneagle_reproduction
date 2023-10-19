@@ -1,0 +1,114 @@
+---
+title: "GEmhc_calc"
+author: "Annegret M Naito-L"
+---
+
+SET UP
+```{r}
+library("dplyr")
+library("data.table")
+library("tidyverse")
+library("tidytable")
+
+alleledata <- read.csv("alleles.csv", header = TRUE) 
+    #table with each individual and their mhc alleles
+alleles <- subset(alleledata, select = -c(allele))
+
+aminoaciddata <- read.csv("aavsites.csv", colClasses="character", header = TRUE)
+    #table of variable positions in amino acid sequence for all mhc alleles
+
+```
+
+Calculate percent difference of alleles between two individuals
+```{r}
+#Vab: number of different alleles between individuals a and b
+#Fa: total number of alleles carried by individual a
+#Fb: total number of alleles carried by individual b
+#PD = 100*Vab/(Fa+Fb) percent difference of alleles between individual a and b 
+
+#make PD function
+PD <- function(a, b) {
+  Fa <- length(na.omit(a))
+  Fb <- length(na.omit(b))
+  shared <- length(intersect(na.omit(a),na.omit(b)))
+  Vab <- (Fa+Fb)-(2*shared)
+  PD <- 100*Vab/(Fa+Fb)
+  PD
+}
+
+pd_out <- as.data.frame(matrix(nrow=51,ncol=51))
+colnames(pd_out) = c(colnames(alleles))
+
+for (n in 1:51) {
+  pd_out[ ,n] <- as.vector((apply(alleles, 2, PD, a = alleles[ ,n])))
+}
+
+write.csv(pd_out,"pd_out.csv")
+```
+
+Make matrix to use for calculating amino acid distances (aadist) for each pair pairs
+```{r}
+##count the number of differences between each amino acid site per allele
+aa <- data.frame(aminoaciddata)
+aa1 <- data.frame(matrix(NA,ncol=1,nrow=17))[-1]
+aa2 <- data.frame(matrix(NA,ncol=1,nrow=17))[-1]
+aa3 <- data.frame(matrix(NA,ncol=1,nrow=17))[-1]
+aa4 <- data.frame(matrix(NA,ncol=1,nrow=17))[-1]
+aa5 <- data.frame(matrix(NA,ncol=1,nrow=17))[-1]
+aa6 <- data.frame(matrix(NA,ncol=1,nrow=17))[-1]
+aa7 <- data.frame(matrix(NA,ncol=1,nrow=17))[-1]
+aa8 <- data.frame(matrix(NA,ncol=1,nrow=17))[-1]
+aa9 <- data.frame(matrix(NA,ncol=1,nrow=17))[-1]
+aa10 <- data.frame(matrix(NA,ncol=1,nrow=17))[-1]
+aa12 <- data.frame(matrix(NA,ncol=1,nrow=17))[-1]
+aa13 <- data.frame(matrix(NA,ncol=1,nrow=17))[-1]
+aa14 <- data.frame(matrix(NA,ncol=1,nrow=17))[-1]
+aa15 <- data.frame(matrix(NA,ncol=1,nrow=17))[-1]
+aa16 <- data.frame(matrix(NA,ncol=1,nrow=17))[-1]
+aa17 <- data.frame(matrix(NA,ncol=1,nrow=17))[-1]
+aa19 <- data.frame(matrix(NA,ncol=1,nrow=17))[-1]
+
+for (i in 1:17) { #17 alleles,
+  for (j in 1:17)  { #17 variable sites
+    aa1[i,j] <- all(aa[1,j] == aa[i,j])
+    aa2[i,j] <- all(aa[2,j] == aa[i,j])
+    aa3[i,j] <- all(aa[3,j] == aa[i,j])
+    aa4[i,j] <- all(aa[4,j] == aa[i,j])
+    aa5[i,j] <- all(aa[5,j] == aa[i,j])
+    aa6[i,j] <- all(aa[6,j] == aa[i,j])
+    aa7[i,j] <- all(aa[7,j] == aa[i,j])
+    aa8[i,j] <- all(aa[8,j] == aa[i,j])
+    aa9[i,j] <- all(aa[9,j] == aa[i,j])
+    aa10[i,j] <- all(aa[10,j] == aa[i,j])
+    aa12[i,j] <- all(aa[11,j] == aa[i,j])
+    aa13[i,j] <- all(aa[12,j] == aa[i,j])
+    aa14[i,j] <- all(aa[13,j] == aa[i,j])
+    aa15[i,j] <- all(aa[14,j] == aa[i,j])
+    aa16[i,j] <- all(aa[15,j] == aa[i,j])
+    aa17[i,j] <- all(aa[16,j] == aa[i,j])
+    aa19[i,j] <- all(aa[17,j] == aa[i,j])
+  }
+}
+
+##make aadist matrix for protein binding region
+aadist_pbr <- data.frame(matrix(NA, ncol=1, nrow=17))[-1]
+aadist_pbr$V1 <- 15-rowSums(aa1[1:15])
+aadist_pbr$V2 <- 15-rowSums(aa2[1:15])
+aadist_pbr$V3 <- 15-rowSums(aa3[1:15])
+aadist_pbr$V4 <- 15-rowSums(aa4[1:15])
+aadist_pbr$V5 <- 15-rowSums(aa5[1:15])
+aadist_pbr$V6 <- 15-rowSums(aa6[1:15])
+aadist_pbr$V7 <- 15-rowSums(aa7[1:15])
+aadist_pbr$V8 <- 15-rowSums(aa8[1:15])
+aadist_pbr$V9 <- 15-rowSums(aa9[1:15])
+aadist_pbr$V10 <- 15-rowSums(aa10[1:15])
+aadist_pbr$V12 <- 15-rowSums(aa12[1:15])
+aadist_pbr$V13 <- 15-rowSums(aa13[1:15])
+aadist_pbr$V14 <- 15-rowSums(aa14[1:15])
+aadist_pbr$V15 <- 15-rowSums(aa15[1:15])
+aadist_pbr$V16 <- 15-rowSums(aa16[1:15])
+aadist_pbr$V17 <- 15-rowSums(aa17[1:15])
+aadist_pbr$V19 <- 15-rowSums(aa19[1:15])
+
+write.csv(aadist_pbr,"aadist_pbr_matrix.csv")
+```
