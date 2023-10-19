@@ -1,0 +1,483 @@
+###R script for GLMMs###
+
+##Set up##
+#load packages
+library("TMB")
+library("glmmTMB")
+library("tidyr")
+library("dplyr")
+library("DHARMa")
+library("MuMIn")
+library("ggplot2")
+library("ggeffects")
+
+#import and curate data
+data <- read.csv(file="data.csv", head = T) #read all data
+
+clutch <- data%>%drop_na(natclutch) 
+    #remove rows with unknown natural clutches (due to clutch supplementation)
+    #use this dataset for predicting the number of eggs laid
+
+data_yn = data%>%drop_na(hatchable)
+    #remove rows with unknown number of eggs able to hatch (due to egg removal,etc.)
+data_yn = data_yn %>% mutate(hatched_yn = ifelse(hatched>0,1,hatched))
+    #transform all entries with greater than one egg hatched to 1
+    #use this dataset for predicting hatching (yes or no)
+
+hatchable <- data%>%drop_na(hatchable)
+    #remove rows with unknown number of eggs able to hatch (due to egg removal,etc.)
+hatchable$hatchrate <- with(hatchable, hatched/hatchable)
+    #create new column with hatch rate
+hatchable = hatchable %>% 
+            mutate(hatchrate2 = ifelse(hatchrate == 0, 0.000001, hatchrate), 
+                   hatchrate2 = ifelse(hatchrate2 == 1, 0.999999, hatchrate2))
+    #transform hatch rate to be >0, <1
+    #use this dataset for predicting hatch rate
+
+datafert <- read.csv(file="datafert.csv", head = T) #read all data from fertilization set
+datafert$fertrate <- with(datafert, fertilized/eggs)
+    #create new column with fertilization rate
+datafert = datafert %>% mutate(fertrate2 = ifelse(fertrate == 0, 0.000001, fertrate), 
+                               fertrate2 = ifelse(fertrate2 == 1, 0.999999, fertrate2))
+    #transform fertilization rate to be >0, <1
+    #use this dataset for predicting fertilization rate
+
+#create separate datasets to analyze genetic effects by removing data of pairs with no genetic data
+clutch_gen <- clutch%>%drop_na(aadisPBR)
+hatchable_gen <- hatchable%>%drop_na(aadisPBR)
+datafert_gen <- datafert%>%drop_na(aadisPBR)
+data_yn_gen <- data_yn%>%drop_na(aadisPBR)
+
+
+##Predict number of eggs laid with non-genetic factors##
+#test all combinations
+clutch1 <- glmmTMB(natclutch~studrel+studrel.2+repyears+age_m+age_f+
+                     (1|male)+(1|female)+(1|zoo),family=compois, data=clutch)
+  summary(clutch1)
+  options(na.action = "na.fail")
+  clutch1_dredge = dredge(clutch1)
+  print(clutch1_dredge)
+  write.csv(clutch1_dredge, file = "clutch1_dredge.csv")
+
+#models with dAIC < 2
+clutch1.1 <- glmmTMB(natclutch~repyears+studrel+studrel.2+
+              (1|male)+(1|female)+(1|zoo), family=compois, data=clutch)
+  summary(clutch1.1)
+  AICc(clutch1.1)
+  testDispersion(clutch1.1) #ok
+  diagnose(clutch1.1) #large z
+  plotQQunif(clutch1.1)
+  plotResiduals(clutch1.1)
+  
+clutch1.2 <- glmmTMB(natclutch~age_m+repyears+(1|male)+(1|female)+(1|zoo),
+                          family=compois, data=clutch)
+  summary(clutch1.2)
+  AICc(clutch1.2)
+  testDispersion(clutch1.2) #ok
+  diagnose(clutch1.2) #unusually large z stat
+  plotQQunif(clutch1.2)
+  plotResiduals(clutch1.2)
+  
+clutch1.3 <- glmmTMB(natclutch~age_f+age_m+(1|male)+(1|female)+(1|zoo),
+                          family=compois, data=clutch)
+  summary(clutch1.3)
+  AICc(clutch1.3)
+  testDispersion(clutch1.3) #ok
+  diagnose(clutch1.3) #unusually large z stat
+  plotQQunif(clutch1.3)#deviating...
+  plotResiduals(clutch1.3) #deviating...
+  
+clutch1.4 <- glmmTMB(natclutch~age_m+repyears+studrel+studrel.2+
+                  (1|male)+(1|female)+(1|zoo), family=compois, data=clutch)
+  summary(clutch1.4)
+  AICc(clutch1.4)
+  testDispersion(clutch1.4) #ok
+  diagnose(clutch1.4) #unusually large z stat
+  plotQQunif(clutch1.4)
+  plotResiduals(clutch1.4) #ok!
+  
+clutch1.5 <- glmmTMB(natclutch~age_f+repyears+studrel+studrel.2+
+                  (1|male)+(1|female)+(1|zoo), family=compois, data=clutch)
+  summary(clutch1.5)
+  AICc(clutch1.5)
+  testDispersion(clutch1.5) #ok
+  diagnose(clutch1.5) #unusually large z stat
+  plotQQunif(clutch1.5)
+  plotResiduals(clutch1.5) #ok!
+  
+clutch1.6 <- glmmTMB(natclutch~age_f+studrel+studrel.2+
+                (1|male)+(1|female)+(1|zoo), family=compois, data=clutch)
+  summary(clutch1.6)
+  AICc(clutch1.6)
+  testDispersion(clutch1.6) #ok
+  diagnose(clutch1.6) #unusually large z stat
+  plotQQunif(clutch1.6)
+  plotResiduals(clutch1.6) #ok!
+  
+clutch1.7 <- glmmTMB(natclutch~age_m+age_f+repyears+
+                  (1|male)+(1|female)+(1|zoo), family=compois, data=clutch)
+  summary(clutch1.7)
+  AICc(clutch1.7)
+  testDispersion(clutch1.7) #ok
+  diagnose(clutch1.7) #unusually large z stat
+  plotQQunif(clutch1.7)
+  plotResiduals(clutch1.7) #ok!
+
+clutch1.8 <- glmmTMB(natclutch~age_m+studrel+repyears+
+                  (1|male)+(1|female)+(1|zoo), family=compois, data=clutch)
+  summary(clutch1.8)
+  AICc(clutch1.8)
+  testDispersion(clutch1.8) #ok
+  diagnose(clutch1.8) #unusually large z stat
+  plotQQunif(clutch1.8)
+  plotResiduals(clutch1.8) #ok!
+  
+#plots
+jpeg("clutch_repyears.jpg",res=600, width=4000, height=3000, pointsize=10)
+plot(ggpredict(clutch1.2, terms=c("repyears")))+
+    geom_count(data=clutch, stroke = NA, aes(repyears,natclutch), 
+    alpha = 0.7, stat = "sum", position = "identity")
+dev.off()
+
+jpeg("clutch_agem.jpg",res=600, width=4000, height=3000, pointsize=10)
+plot(ggpredict(clutch1.2, terms=c("age_m")))+
+    geom_count(data=clutch, stroke = NA, aes(age_m,natclutch), 
+    alpha = 0.7, stat = "sum", position = "identity")
+dev.off()
+
+jpeg("clutch_studrel.jpg",res=600, width=4000, height=3000, pointsize=10)
+plot(ggpredict(clutch1.5, terms=c("studrel")))+
+    geom_count(data=clutch, stroke = NA, aes(studrel,natclutch), 
+    alpha = 0.7, stat = "sum", position = "identity")
+dev.off()
+
+jpeg("clutch_agef.jpg",res=600, width=4000, height=3000, pointsize=10)
+plot(ggpredict(clutch1.6, terms=c("age_f")))+
+    geom_count(data=clutch, stroke = NA, aes(age_f,natclutch), 
+    alpha = 0.7, stat = "sum", position = "identity")
+dev.off()
+
+
+##Predict hatching (yes/no) with non-genetic factors##
+#test all combinations
+hatchyn1 <- glmmTMB(hatched_yn~studrel+studrel.2+repyears+age_m+age_f+
+             (1|male)+(1|female)+(1|zoo), family=betabinomial, data=data_yn)
+  summary(hatchyn1)
+  options(na.action = "na.fail")
+  hatchyn1_dredge = dredge(hatchyn1)
+  print(hatchyn1_dredge)
+  write.csv(hatchyn1_dredge, file = "hatchyn1_dredge_betabin.csv")
+
+#models with dAIC < 2
+hatchyn1.1 <- glmmTMB(hatched_yn~age_m+
+             (1|male)+(1|female)+(1|zoo), family=betabinomial, data=data_yn)
+  summary(hatchyn1.1)
+  AICc(hatchyn1.1)
+  testDispersion(hatchyn1.1) # slightly over but ok
+  diagnose(hatchyn1.1) #large zi
+  plot(simulateResiduals(hatchyn1.1)) #ok
+
+hatchyn1.2 <- glmmTMB(hatched_yn~age_f+age_m+
+              (1|male)+(1|female)+(1|zoo), family=betabinomial, data=data_yn)
+  summary(hatchyn1.2)
+  AICc(hatchyn1.2)
+  testDispersion(hatchyn1.2) # slightly over but ok
+  diagnose(hatchyn1.2) #large zi
+  plot(simulateResiduals(hatchyn1.2)) #top res dev
+  
+#plots
+jpeg("hatchyn_agem.jpg",res=600, width=4000, height=3000, pointsize=10)
+plot(ggpredict(hatchyn1.1, terms=c("age_m")))+
+    geom_count(data=data_yn, stroke = NA, aes(age_m,hatched_yn), 
+    alpha = 0.7, stat = "sum", position = "identity")  
+dev.off()
+
+
+##Predict hatch rate with non-genetic factors##
+#test all combinations
+hatchrate1rate <- glmmTMB(hatchrate2~studrel+studrel.2+repyears+age_m+age_f+
+                    (1|male)+(1|female)+(1|zoo), family=ordbeta,
+                    start = list(psi = c(-1, 1)), data=hatchable)
+  summary(hatchrate1rate) #did not converge
+  AICc(hatchrate1rate)
+  options(na.action = "na.fail")
+  hatch1rate_dredge = dredge(hatchrate1rate)
+  print(hatch1rate_dredge)
+  write.csv(hatch1rate_dredge, file = "hatch1_rate2_dredge.csv")
+
+#models with dAIC < 2
+hatchrate1.1 <- glmmTMB(hatchrate2~age_m+
+                (1|male)+(1|female)+(1|zoo), family=ordbeta(link = "logit"),
+                    start = list(psi = c(-1, 1)), data=hatchable)
+  summary(hatchrate1.1) #non converge
+  AICc(hatchrate1.1)
+  testDispersion(hatchrate1.1) #??
+  diagnose(hatchrate1.1) #??
+  plot(simulateResiduals(hatchrate1.1)) #good!
+
+hatchrate1.2 <- glmmTMB(hatchrate2~age_m+repyears+
+                (1|male)+(1|female)+(1|zoo), family=ordbeta(link = "logit"),
+                    start = list(psi = c(-1, 1)), data=hatchable)
+  summary(hatchrate1.2)
+  AICc(hatchrate1.2)
+  testDispersion(hatchrate1.2) #??
+  diagnose(hatchrate1.2) #??
+  plotQQunif(hatchrate1.2) #ok 
+  plotResiduals(hatchrate1.2) #bottom res dev
+  
+hatchrate1.3 <- glmmTMB(hatchrate~age_f+
+                (1|male)+(1|female)+(1|zoo), family=ordbeta(link = "logit"),
+                    start = list(psi = c(-1, 1)), data=hatchable)
+  summary(hatchrate1.3)
+  AICc(hatchrate1.3)
+  testDispersion(hatchrate1.3) #??
+  diagnose(hatchrate1.3) #??
+  plotQQunif(hatchrate1.3) #ok 
+  plotResiduals(hatchrate1.3) #bottom res dev
+  
+#plots
+plot(ggpredict(hatchrate1.2, terms=c("age_m")))+
+      geom_count(data=hatchable, stroke = NA, aes(age_m,hatched/hatchable), 
+      alpha = 0.7, stat = "sum", position = "identity")
+
+##Predict fertilization rate with non-genetic factors##
+#test all combinations
+fertrate1 <- glmmTMB(fertrate2~studrel+studrel.2+repyears+age_m+age_f+
+                    (1|male)+(1|female)+(1|zoo), family=ordbeta(link = "logit"),
+                    start = list(psi = c(-1, 1)), data=datafert)
+  summary(fertrate1)
+  options(na.action = "na.fail")
+  fert1_dredge = dredge(fertrate1)
+  write.csv(fert1_dredge, file = "fert1_rate_dredge.csv")
+  
+#models with dAIC < 2
+fertrate1.1 <- glmmTMB(fertrate2~age_m+
+                   (1|male)+(1|female)+(1|zoo), family=ordbeta(link = "logit"),
+                    start = list(psi = c(-1, 1)), data=datafert)
+  summary(fertrate1.1) #did not
+  AICc(fertrate1.1)
+  testDispersion(fertrate1.1) #ok
+  diagnose(fertrate1.1) #large Z
+  plot(simulateResiduals(fertrate1.1)) #top res dev
+
+fertrate1.2 <- glmmTMB(fertrate2~age_m+repyears+
+                   (1|male)+(1|female)+(1|zoo), family=ordbeta(link = "logit"),
+                    start = list(psi = c(-1, 1)), data=datafert)
+  summary(fertrate1.2)
+  AICc(fertrate1.2)
+  testDispersion(fertrate1.2) #ok
+  diagnose(fertrate1.2) #large Z
+  plot(simulateResiduals(fertrate1.2)) #ok
+
+#plots
+jpeg("fr_agem.jpg",res=600, width=4000, height=3000, pointsize=10)
+plot(ggpredict(fertrate1.2, terms=c("age_m")))+
+    geom_count(data=datafert, stroke = NA, aes(age_m,fertilized/eggs), 
+    alpha = 0.7, stat = "sum", position = "identity")  
+dev.off()
+
+##Predict number of eggs laid with genetic factors##
+#test all combinations
+clutch2 <- glmmTMB(natclutch~aadisPBR+aadisPBR.2+pd+pd.2+nam+naf+
+                     (1|male)+(1|female)+(1|zoo), family=compois, data=clutch_gen)
+  summary(clutch2)
+  options(na.action = "na.fail")
+  clutch2_dredge = dredge(clutch2)
+  print(clutch2_dredge)
+  write.csv(clutch2_dredge, file = "clutch2_dredge.csv")
+  
+#models with dAIC < 2
+clutch2.1 <- glmmTMB(natclutch~naf+aadisPBR.2+(1|male)+(1|female)+(1|zoo), 
+                          family=compois, data=clutch_gen)
+  summary(clutch2.1)
+  AICc(clutch2.1)
+  testDispersion(clutch2.1) #ok
+  diagnose(clutch2.1) #large z stat
+  plotQQunif(clutch2.1) #deviating... 
+  plotResiduals(clutch2.1) #deviating...
+  
+clutch2.2 <- glmmTMB(natclutch~naf+(1|male)+(1|female)+(1|zoo), 
+                          family=compois, data=clutch_gen)
+  summary(clutch2.2)
+  AICc(clutch2.2)
+  testDispersion(clutch2.2) #ok
+  diagnose(clutch2.2) #large z stat
+  plotQQunif(clutch2.2) #deviating... 
+  plotResiduals(clutch2.2) #ok  
+
+clutch2.3 <- glmmTMB(natclutch~aadisPBR+naf+(1|male)+(1|female)+(1|zoo), 
+                          family=compois, data=clutch_gen)
+  summary(clutch2.3) #nonconvergent
+  AICc(clutch2.3)
+  testDispersion(clutch2.3) #ok
+  diagnose(clutch2.3) #large zi stat
+  plotQQunif(clutch2.3) #deviating... 
+  plotResiduals(clutch2.3) #deviating... 
+  
+clutch2.4 <- glmmTMB(natclutch~aadisPBR.2+(1|male)+(1|female)+(1|zoo), 
+                          family=compois, data=clutch_gen)
+  summary(clutch2.4)
+  AICc(clutch2.4)
+  testDispersion(clutch2.4) #ok
+  diagnose(clutch2.4) #large z stat
+  plotQQunif(clutch2.4) #ok 
+  plotResiduals(clutch2.4) #deviating... 
+  
+clutch2.5 <- glmmTMB(natclutch~aadisPBR+(1|male)+(1|female)+(1|zoo), 
+                          family=compois, data=clutch_gen)
+  summary(clutch2.5) 
+  AICc(clutch2.5)
+  testDispersion(clutch2.5) #ok
+  diagnose(clutch2.5) #large z stat
+  plotQQunif(clutch2.5) #deviating... 
+  plotResiduals(clutch2.5) #ok 
+  
+clutch2.6 <- glmmTMB(natclutch~pd.2+(1|male)+(1|female)+(1|zoo), 
+                          family=compois, data=clutch_gen)
+  summary(clutch2.6) 
+  AICc(clutch2.6)
+  testDispersion(clutch2.6) #ok
+  diagnose(clutch2.6) #large z stat
+  plotQQunif(clutch2.6) #deviating... 
+  plotResiduals(clutch2.6) #deviating... 
+  
+clutch2.7 <- glmmTMB(natclutch~pd+(1|male)+(1|female)+(1|zoo), 
+                          family=compois, data=clutch_gen)
+  summary(clutch2.7)
+  AICc(clutch2.7)
+  testDispersion(clutch2.7) #ok
+  diagnose(clutch2.7) #large z stat
+  plotQQunif(clutch2.7) #deviating... 
+  plotResiduals(clutch2.7) #deviating... 
+  
+clutch2.8 <- glmmTMB(natclutch~naf+pd.2+(1|male)+(1|female)+(1|zoo), 
+                          family=compois, data=clutch_gen)
+  summary(clutch2.8)
+  AICc(clutch2.8)
+  testDispersion(clutch2.8) #ok
+  diagnose(clutch2.8) #large z stat
+  plotQQunif(clutch2.8) #ok 
+  plotResiduals(clutch2.8) #top res dev  
+
+clutch2.9 <- glmmTMB(natclutch~naf+pd+(1|male)+(1|female)+(1|zoo), 
+                          family=compois, data=clutch_gen)
+  summary(clutch2.9)
+  AICc(clutch2.9)
+  testDispersion(clutch2.9) #ok
+  diagnose(clutch2.9) #large z stat
+  plotQQunif(clutch2.9) #ok 
+  plotResiduals(clutch2.9) #bottom res dev  
+  
+#plots
+plot(ggpredict(clutch2.2, terms=c("aadisPBR")))+
+       geom_count(data=clutch_gen, stroke = NA, aes(aadisPBR,natclutch), 
+                alpha = 0.7, stat = "sum", position = "identity")  
+
+##Predict hatching (yes/no) with genetic factors##
+#test all combinations
+hatchyn2 <- glmmTMB(hatched_yn~aadisPBR+aadisPBR.2+pd+pd.2+nam+naf+
+            (1|male)+(1|female)+(1|zoo), family=betabinomial, data=data_yn_gen)
+  summary(hatchyn2)
+  options(na.action = "na.fail")
+  hatchyn2_dredge = dredge(hatchyn2)
+  write.csv(hatchyn2_dredge, file = "hatchyn2_dredge_betabin.csv")
+
+hatchyn2.1 <- glmmTMB(hatched_yn~aadisPBR.2+naf+nam+pd+(1|male)+(1|female)+(1|zoo), 
+                      family=betabinomial, data=data_yn_gen)
+  summary(hatchyn2.1) #did not converge
+  AICc(hatchyn2.1)
+
+##Predict hatch rate with genetic factors##
+#test all combinations
+hatchrate2rate <- glmmTMB(hatchrate2~aadisPBR+aadisPBR.2+pd+pd.2+nam+naf+
+                  (1|male)+(1|female)+(1|zoo), family=ordbeta(link = "logit"),
+                  start = list(psi = c(-1, 1)), data=hatchable_gen)
+  summary(hatchrate2rate)
+  options(na.action = "na.fail")
+  hatchrate2rate_dredge = dredge(hatchrate2rate)
+  print(hatchrate2rate_dredge)
+  write.csv(hatchrate2rate_dredge, file = "hatch2_rate2_dredge.csv")
+
+#dAIC < 2 models
+hatchrate2.1 <- glmmTMB(hatchrate2~aadisPBR.2+naf+
+                  (1|male)+(1|female)+(1|zoo), family=ordbeta(link = "logit"),
+                  start = list(psi = c(-1, 1)), data=hatchable_gen)
+  summary(hatchrate2.1) #did not converge
+  AICc(hatchrate2.1)
+  testDispersion(hatchrate2.1) #??
+  diagnose(hatchrate2.1) #??
+  plotQQunif(hatchrate2.1) #ok 
+  plotResiduals(hatchrate2.1) #ok
+  
+hatchrate2.2 <- glmmTMB(hatchrate2~aadisPBR+naf+
+                  (1|male)+(1|female)+(1|zoo), family=ordbeta(link = "logit"),
+                  start = list(psi = c(-1, 1)), data=hatchable_gen)
+  summary(hatchrate2.2) #ok
+  AICc(hatchrate2.2)
+  testDispersion(hatchrate2.2) #??
+  diagnose(hatchrate2.2) #??
+  plotQQunif(hatchrate2.2) #ok 
+  plotResiduals(hatchrate2.2) #ok
+  
+hatchrate2.3 <- glmmTMB(hatchrate2~aadisPBR+
+                  (1|male)+(1|female)+(1|zoo), family=ordbeta(link = "logit"),
+                  start = list(psi = c(-1, 1)), data=hatchable_gen)
+  summary(hatchrate2.3) #ok
+  AICc(hatchrate2.3)
+  testDispersion(hatchrate2.3) #??
+  diagnose(hatchrate2.3) #??
+  plotQQunif(hatchrate2.3) #ok 
+  plotResiduals(hatchrate2.3) #ok
+  
+hatchrate2.4 <- glmmTMB(hatchrate2~aadisPBR.2+
+                  (1|male)+(1|female)+(1|zoo), family=ordbeta(link = "logit"),
+                  start = list(psi = c(-1, 1)), data=hatchable_gen)
+  summary(hatchrate2.4) #did not converge
+
+hatchrate2.5 <- glmmTMB(hatchrate2~nam+
+                  (1|male)+(1|female)+(1|zoo), family=ordbeta(link = "logit"),
+                  start = list(psi = c(-1, 1)), data=hatchable_gen)
+  summary(hatchrate2.5) #ok
+  AICc(hatchrate2.5)
+  testDispersion(hatchrate2.5) #??
+  diagnose(hatchrate2.5) #??
+  plotQQunif(hatchrate2.5) #ok 
+  plotResiduals(hatchrate2.5) #ok
+  
+hatchrate2.6 <- glmmTMB(hatchrate2~naf+
+                  (1|male)+(1|female)+(1|zoo), family=ordbeta(link = "logit"),
+                  start = list(psi = c(-1, 1)), data=hatchable_gen)
+  summary(hatchrate2.6) #ok
+  AICc(hatchrate2.6)
+  testDispersion(hatchrate2.6) #??
+  diagnose(hatchrate2.6) #??
+  plotQQunif(hatchrate2.6) #ok 
+  plotResiduals(hatchrate2.6) #ok
+  
+hatchrate2.7 <- glmmTMB(hatchrate2~naf+pd+aadisPBR.2+
+                  (1|male)+(1|female)+(1|zoo), family=ordbeta(link = "logit"),
+                  start = list(psi = c(-1, 1)), data=hatchable_gen)
+  summary(hatchrate2.7) #did not converge
+  AICc(hatchrate2.7)
+  testDispersion(hatchrate2.7) #??
+  diagnose(hatchrate2.7) #??
+  plot(simulateResiduals(hatchrate2.7)) #top res dev
+  
+#plots
+jpeg("hr_aadisPBR.jpg",res=600, width=4000, height=3000, pointsize=10)
+plot(ggpredict(hatchrate2.2, terms=c("aadisPBR")))+
+      geom_count(data=hatchable_gen, stroke = NA, aes(aadisPBR,hatched/hatchable), 
+      alpha = 0.7, stat = "sum", position = "identity")
+dev.off()
+
+##Predict fertilization rate with genetic factors##
+#test all combinations
+fertrate2 <- glmmTMB(fertrate2~aadisPBR+aadisPBR.2+pd+pd.2+nam+naf+
+                  (1|male)+(1|female)+(1|zoo), family=ordbeta(link = "logit"),
+                  start = list(psi = c(-1, 1)), data=datafert_gen)
+  summary(fertrate2) 
+  options(na.action = "na.fail")
+  fert2_dredge = dredge(fertrate2)
+  write.csv(fert2_dredge, file = "fert2rate_dredge.csv")
+
+#no dAICc<2 models other than null
